@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>發票資料自動擷取與 Excel 整理工具</title>
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 載入 Google Fonts: Inter 與 Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#1e1b4b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    /* 自訂捲軸樣式 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    /* 可編輯儲存格聚焦效果 */
+    .editable-cell:focus {
+      outline: none;
+      background-color: #eef2ff;
+      box-shadow: inset 0 0 0 2px #4f46e5;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-100 selection:text-indigo-900">
+
+  <!-- 頂部導覽列 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">發票資料自動擷取工具</h1>
+          <p class="text-xs text-slate-500 hidden sm:block">AI 智慧辨識 PDF 與圖檔 • 一鍵無標題列複製貼上至 Excel (A–E 欄)</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button id="btnLoadSample" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+          </svg>
+          <span>載入範例測試</span>
+        </button>
+        <button id="btnClearAll" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          <span>清空重來</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 提示訊息 Banner（替代 alert） -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full px-4 sm:px-0 pointer-events-none"></div>
+
+  <!-- 主要內容區 -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+
+    <!-- 提取規則說明卡片（可收合或精簡展示） -->
+    <section class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-slate-800 font-semibold text-sm">
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">i</span>
+          <span>預設自動整理規則（對應 Excel A 至 E 欄）</span>
+        </div>
+        <span class="text-xs text-slate-500">自動忽略空白頁與無效頁面 • 複製時自動略過標題列</span>
+      </div>
+      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs">
+        <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+          <span class="font-bold text-indigo-700 block mb-0.5">A 欄：Invoice 日期</span>
+          <span class="text-slate-600">統一為 <code class="bg-white px-1 py-0.5 rounded border border-slate-200">YYYY/MM/DD</code></span>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+          <span class="font-bold text-indigo-700 block mb-0.5">B 欄：公司名稱</span>
+          <span class="text-slate-600">供應商英文名優先，無則填中文名</span>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+          <span class="font-bold text-indigo-700 block mb-0.5">C 欄：Invoice No.</span>
+          <span class="text-slate-600">自動偵測發票單號</span>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+          <span class="font-bold text-indigo-700 block mb-0.5">D 欄：價格</span>
+          <span class="text-slate-600">一律格式化為 <code class="bg-white px-1 py-0.5 rounded border border-slate-200">$XXXX</code>（去逗號）</span>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+          <span class="font-bold text-indigo-700 block mb-0.5">E 欄：項目內容</span>
+          <span class="text-slate-600">貨品/服務與數量，以「、」分隔</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 檔案上傳與佇列區 -->
+    <section class="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+          <span class="w-6 h-6 rounded-lg bg-slate-900 text-white text-xs flex items-center justify-center font-bold">1</span>
+          <span>上傳發票 PDF 或圖片</span>
+        </h2>
+        <span id="fileCountBadge" class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">尚未選擇檔案</span>
+      </div>
+
+      <!-- 拖拉上傳區 -->
+      <div id="dropZone" class="relative border-2 border-dashed border-slate-300 hover:border-indigo-500 bg-slate-50/70 hover:bg-indigo-50/30 rounded-2xl p-6 sm:p-10 text-center transition-all cursor-pointer group">
+        <input id="fileInput" type="file" multiple accept=".pdf,image/jpeg,image/png,image/webp" class="hidden" />
+        <div class="mx-auto w-14 h-14 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-indigo-600 group-hover:scale-105 transition-transform mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+        </div>
+        <p class="text-sm sm:text-base font-semibold text-slate-800">
+          點擊選擇檔案，或將發票拖拉至此處
+        </p>
+        <p class="text-xs sm:text-sm text-slate-500 mt-1">
+          支援 <span class="font-medium text-slate-700">PDF（含多頁發票）</span>、<span class="font-medium text-slate-700">JPG</span>、<span class="font-medium text-slate-700">PNG</span>、<span class="font-medium text-slate-700">WEBP</span>，可一次上傳多個檔案
+        </p>
+      </div>
+
+      <!-- 已上傳檔案列表 -->
+      <div id="fileListWrapper" class="hidden space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">待辨識檔案清單</span>
+          <button id="btnAddMore" type="button" class="text-xs font-medium text-indigo-600 hover:text-indigo-800 cursor-pointer">+ 繼續新增檔案</button>
+        </div>
+        <div id="fileList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+      </div>
+
+      <!-- 執行 AI 擷取按鈕列 -->
+      <div class="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-100">
+        <div id="statusText" class="text-xs sm:text-sm text-slate-500 flex items-center gap-2">
+          <span>請先上傳至少一份發票 PDF 或圖片檔案。</span>
+        </div>
+        <button id="btnExtract" type="button" disabled class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed shadow-sm transition-all cursor-pointer">
+          <svg id="extractIcon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <svg id="extractSpinner" class="hidden animate-spin w-5 h-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span id="extractBtnText">開始 AI 智慧擷取</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 結果預覽與一鍵複製區 -->
+    <section class="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-5">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-lg bg-slate-900 text-white text-xs flex items-center justify-center font-bold">2</span>
+            <span>整理結果預覽（可直接點擊儲存格微調）</span>
+            <span id="rowCountBadge" class="ml-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700">0 筆資料</span>
+          </h2>
+          <p class="text-xs text-slate-500 mt-1">複製時會自動略過下方藍色標題列，僅複製資料列（Tab 分隔），可直接貼入 Excel A 至 E 欄。</p>
+        </div>
+
+        <!-- 操作按鈕群組 -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <button id="btnAddRow" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>手動新增一列</span>
+          </button>
+
+          <button id="btnExportCsv" type="button" disabled class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>匯出 CSV</span>
+          </button>
+
+          <button id="btnCopyExcel" type="button" disabled class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed shadow-sm transition-all cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+            </svg>
+            <span>一鍵複製（不含標題列，可直接貼入 Excel）</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 資料表格容器 -->
+      <div class="overflow-x-auto rounded-xl border border-slate-200">
+        <table class="w-full text-left border-collapse min-w-[820px]">
+          <thead>
+            <tr class="bg-indigo-50/80 border-b border-slate-200 text-xs font-bold text-indigo-950">
+              <th class="py-3 px-3.5 w-32 border-r border-slate-200">
+                <div class="flex items-center justify-between">
+                  <span>A 欄：Invoice 日期</span>
+                </div>
+              </th>
+              <th class="py-3 px-3.5 w-64 border-r border-slate-200">B 欄：公司名稱</th>
+              <th class="py-3 px-3.5 w-36 border-r border-slate-200">C 欄：Invoice No.</th>
+              <th class="py-3 px-3.5 w-28 border-r border-slate-200">D 欄：價格</th>
+              <th class="py-3 px-3.5 border-r border-slate-200">E 欄：項目內容</th>
+              <th class="py-3 px-2.5 w-14 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody id="resultTableBody" class="divide-y divide-slate-200 text-sm text-slate-800 bg-white">
+            <!-- 空狀態預設列 -->
+            <tr id="emptyStateRow">
+              <td colspan="6" class="py-12 px-4 text-center text-slate-400">
+                <div class="max-w-sm mx-auto space-y-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <p class="text-sm font-medium text-slate-500">尚無擷取資料</p>
+                  <p class="text-xs text-slate-400">請上傳發票 PDF 或圖片並點擊「開始 AI 智慧擷取」，或點擊右上角「載入範例測試」體驗效果。</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 頁尾 -->
+  <footer class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 text-center text-xs text-slate-400">
+    發票資料自動擷取與 Excel 整理工具 • 支援多頁 PDF 與圖片批次解析
+  </footer>
+
+  <script>
+    /**
+     * 應用程式狀態管理
+     */
+    const state = {
+      files: [], // 儲存 { id, file, name, size, type, previewUrl }
+      rows: [],  // 儲存 { id, date, companyName, invoiceNo, price, items }
+      isProcessing: false
+    };
+
+    // DOM 元素參照
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileListWrapper = document.getElementById('fileListWrapper');
+    const fileList = document.getElementById('fileList');
+    const fileCountBadge = document.getElementById('fileCountBadge');
+    const btnAddMore = document.getElementById('btnAddMore');
+    const btnExtract = document.getElementById('btnExtract');
+    const extractIcon = document.getElementById('extractIcon');
+    const extractSpinner = document.getElementById('extractSpinner');
+    const extractBtnText = document.getElementById('extractBtnText');
+    const statusText = document.getElementById('statusText');
+
+    const resultTableBody = document.getElementById('resultTableBody');
+    const rowCountBadge = document.getElementById('rowCountBadge');
+    const btnCopyExcel = document.getElementById('btnCopyExcel');
+    const btnExportCsv = document.getElementById('btnExportCsv');
+    const btnAddRow = document.getElementById('btnAddRow');
+    const btnLoadSample = document.getElementById('btnLoadSample');
+    const btnClearAll = document.getElementById('btnClearAll');
+    const toastContainer = document.getElementById('toastContainer');
+
+    /**
+     * 顯示自訂通知訊息（取代 alert）
+     * @param {string} message 訊息內容
+     * @param {'success'|'error'|'info'} type 訊息類型
+     */
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-900 text-white border-emerald-700',
+        error: 'bg-rose-900 text-white border-rose-700',
+        info: 'bg-slate-900 text-white border-slate-700'
+      };
+      const icons = {
+        success: `<svg class="w-5 h-5 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>`,
+        error: `<svg class="w-5 h-5 text-rose-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
+        info: `<svg class="w-5 h-5 text-indigo-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
+      };
+
+      toast.className = `pointer-events-auto flex items-start gap-3 p-4 rounded-2xl border shadow-lg text-sm transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type]}`;
+      toast.innerHTML = `
+        ${icons[type]}
+        <div class="flex-1 leading-relaxed">${escapeHtml(message)}</div>
+      `;
+
+      toastContainer.appendChild(toast);
+
+      // 進場動畫
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      // 自動消失
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 4500);
+    }
+
+    /**
+     * HTML 字串跳脫防護
+     */
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    /**
+     * 格式化檔案大小
+     */
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    /**
+     * 後處理與標準化單筆發票欄位，確保完全符合使用者規定
+     */
+    function normalizeInvoiceRecord(raw) {
+      // 1. 日期格式化：確保為 YYYY/MM/DD
+      let dateStr = (raw.date || '').trim();
+      if (dateStr) {
+        // 將 '-' 或 '.' 統一替換為 '/'
+        dateStr = dateStr.replace(/[-.]/g, '/');
+        // 處理 DD/MM/YYYY 轉 YYYY/MM/DD
+        const dmyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (dmyMatch) {
+          const d = dmyMatch[1].padStart(2, '0');
+          const m = dmyMatch[2].padStart(2, '0');
+          const y = dmyMatch[3];
+          dateStr = `${y}/${m}/${d}`;
+        } else {
+          // 補齊月日的零，例如 2026/1/5 -> 2026/01/05
+          const ymdMatch = dateStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+          if (ymdMatch) {
+            dateStr = `${ymdMatch[1]}/${ymdMatch[2].padStart(2, '0')}/${ymdMatch[3].padStart(2, '0')}`;
+          }
+        }
+      }
+
+      // 2. 公司名稱
+      const companyName = (raw.companyName || '').trim();
+
+      // 3. Invoice No.
+      const invoiceNo = (raw.invoiceNo || '').trim();
+
+      // 4. 價格格式化：一律為 $XXXX（去除千分位逗號與 .00）
+      let priceStr = String(raw.price || '').trim();
+      if (priceStr) {
+        // 移除貨幣文字 (HKD, USD, RMB, MOP 等) 與千分位逗號與空白
+        let numericPart = priceStr.replace(/[A-Za-z$,\s]/g, '');
+        const parsedNum = parseFloat(numericPart);
+        if (!isNaN(parsedNum)) {
+          // 若為整數或 .00 則去除小數點
+          const formattedNum = Number.isInteger(parsedNum) ? parsedNum.toString() : parsedNum.toString();
+          priceStr = `$${formattedNum}`;
+        } else if (!priceStr.startsWith('$')) {
+          priceStr = `$${numericPart || priceStr}`;
+        }
+      }
+
+      // 5. 項目內容
+      const items = (raw.items || '').trim();
+
+      return {
+        id: crypto.randomUUID ? crypto.randomUUID() : 'row_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+        date: dateStr,
+        companyName,
+        invoiceNo,
+        price: priceStr,
+        items
+      };
+    }
+
+    /**
+     * 處理新增檔案（支援拖拉或 input 選擇）
+     */
+    function handleFilesAdded(selectedFiles) {
+      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+      let addedCount = 0;
+
+      Array.from(selectedFiles).forEach(file => {
+        if (!allowedTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.pdf')) {
+          showToast(`不支援的檔案格式：${file.name}（僅支援 PDF、JPG、PNG、WEBP）`, 'error');
+          return;
+        }
+
+        // 避免重複加入完全相同的檔案
+        const isDuplicate = state.files.some(f => f.name === file.name && f.size === file.size);
+        if (isDuplicate) return;
+
+        const isImage = file.type.startsWith('image/');
+        const previewUrl = isImage ? URL.createObjectURL(file) : null;
+
+        state.files.push({
+          id: 'file_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          file,
+          name: file.name,
+          size: file.size,
+          type: file.type || 'application/pdf',
+          previewUrl
+        });
+        addedCount++;
+      });
+
+      if (addedCount > 0) {
+        renderFileList();
+        showToast(`已加入 ${addedCount} 個檔案，點擊「開始 AI 智慧擷取」即可解析。`, 'info');
+      }
+    }
+
+    /**
+     * 渲染已上傳檔案列表
+     */
+    function renderFileList() {
+      const count = state.files.length;
+      fileCountBadge.textContent = count > 0 ? `已選擇 ${count} 個檔案` : '尚未選擇檔案';
+      btnExtract.disabled = count === 0 || state.isProcessing;
+
+      if (count === 0) {
+        fileListWrapper.classList.add('hidden');
+        fileList.innerHTML = '';
+        statusText.innerHTML = '<span>請先上傳至少一份發票 PDF 或圖片檔案。</span>';
+        return;
+      }
+
+      fileListWrapper.classList.remove('hidden');
+      statusText.innerHTML = `<span class="text-indigo-700 font-medium">已準備好 ${count} 個檔案，點擊右側按鈕開始辨識。</span>`;
+
+      fileList.innerHTML = state.files.map(item => {
+        const isPdf = item.type === 'application/pdf' || item.name.toLowerCase().endsWith('.pdf');
+        const thumbHtml = isPdf
+          ? `<div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 flex flex-col items-center justify-center shrink-0 font-bold text-[10px]">
+               <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+               PDF
+             </div>`
+          : `<img src="${item.previewUrl}" alt="${escapeHtml(item.name)}" class="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0" />`;
+
+        return `
+          <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-colors">
+            <div class="flex items-center gap-3 min-w-0">
+              ${thumbHtml}
+              <div class="min-w-0">
+                <p class="text-xs sm:text-sm font-semibold text-slate-800 truncate" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</p>
+                <p class="text-xs text-slate-400">${formatBytes(item.size)}</p>
+              </div>
+            </div>
+            <button type="button" onclick="removeFile('${item.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0" title="移除此檔案">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    /**
+     * 移除單個待辨識檔案
+     */
+    window.removeFile = function(fileId) {
+      if (state.isProcessing) return;
+      const idx = state.files.findIndex(f => f.id === fileId);
+      if (idx !== -1) {
+        if (state.files[idx].previewUrl) {
+          URL.revokeObjectURL(state.files[idx].previewUrl);
+        }
+        state.files.splice(idx, 1);
+        renderFileList();
+      }
+    };
+
+    /**
+     * 將 File 物件轉換為 Base64 字串（不含 data:... 前綴）
+     */
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    /**
+     * 呼叫 Gemini API（含指數退避重試機制）進行發票結構化解析
+     */
+    async function extractInvoicesWithGemini(fileItem) {
+      const base64Data = await fileToBase64(fileItem.file);
+      const mimeType = fileItem.type || 'application/pdf';
+
+      const systemInstruction = `你是一位專業的財務會計資料擷取助手。請仔細閱讀使用者上傳的 PDF 或圖片檔案，找出其中所有的有效發票（Invoice / Receipt），並忽略任何空白頁或無有效發票資訊的頁面。
+若單一 PDF 檔案中包含多張不同發票，請為每一張發票分別建立一筆資料物件。
+
+請嚴格遵守以下 5 個欄位的提取與格式化規則：
+1. date (A欄：Invoice 日期)：統一格式化為 YYYY/MM/DD（例如 2026/11/18）。若原檔為 17-11-2026，請轉換為 2026/11/17。
+2. companyName (B欄：公司名稱)：開立此發票的「賣方／供應商」公司名稱（注意：絕對不要填寫收件人 To / 客戶名稱）。優先使用該供應商的英文公司名稱（保持原文件英文大小寫或全大寫）；只有當文件中完全沒有該供應商的英文名稱時，才填入中文名稱。
+3. invoiceNo (C欄：Invoice No.)：發票編號（例如 20261118001、INV258-26）。若無則留空字串。
+4. price (D欄：價格)：發票的應付總金額（Total Amount），一律格式化為 "$XXXX"（加上 $ 符號，去除貨幣代碼如 HKD/USD、去除千分位逗號與無意義的 .00，例如 $12465、$10000；若有非零小數如 185.50 則保留為 $185.5）。
+5. items (E欄：項目內容)：對方所提供的服務或販賣的貨品摘要。若有多個項目，請以頓號「、」分隔，並在每個項目後方用括號附上數量（例如："掛墙扇 FB-40BC (40個)、乾手機 M-688A (10個)、乾手機 M-2008S (4個)" 或 "簽發 F. S. 251 証書 170_500000 - 500024 (25張)"）。`;
+
+      const payload = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: `請解析檔案「${fileItem.name}」中的所有發票，並依規定格式回傳 JSON 陣列。` },
+              {
+                inlineData: {
+                  mimeType: mimeType,
+                  data: base64Data
+                }
+              }
+            ]
+          }
+        ],
+        systemInstruction: {
+          parts: [{ text: systemInstruction }]
+        },
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'ARRAY',
+            description: '從文件中擷取出的所有有效發票清單',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                date: {
+                  type: 'STRING',
+                  description: 'Invoice 日期，格式為 YYYY/MM/DD'
+                },
+                companyName: {
+                  type: 'STRING',
+                  description: '開立發票的供應商英文名稱（若無英文名則填中文名稱）'
+                },
+                invoiceNo: {
+                  type: 'STRING',
+                  description: '發票編號 (Invoice No.)'
+                },
+                price: {
+                  type: 'STRING',
+                  description: '發票總金額，格式為 $XXXX（去除逗號與 .00）'
+                },
+                items: {
+                  type: 'STRING',
+                  description: '貨品或服務項目摘要與數量，多項以頓號分隔'
+                }
+              },
+              required: ['date', 'companyName', 'invoiceNo', 'price', 'items']
+            }
+          }
+        }
+      };
+
+      const apiKey = "";
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+      // 指數退避重試（1s, 2s, 4s, 8s, 16s）
+      const delays = [1000, 2000, 4000, 8000, 16000];
+      let lastError = null;
+
+      for (let attempt = 0; attempt <= delays.length; attempt++) {
+        try {
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const result = await response.json();
+          const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) {
+            throw new Error('模型未回傳有效內容');
+          }
+
+          const parsedArray = JSON.parse(text);
+          if (!Array.isArray(parsedArray)) {
+            return [];
+          }
+          return parsedArray.map(normalizeInvoiceRecord);
+        } catch (err) {
+          lastError = err;
+          if (attempt < delays.length) {
+            await new Promise(res => setTimeout(res, delays[attempt]));
+          }
+        }
+      }
+
+      throw lastError || new Error('API 呼叫失敗');
+    }
+
+    /**
+     * 執行所有待處理檔案的批次擷取
+     */
+    async function runBatchExtraction() {
+      if (state.files.length === 0 || state.isProcessing) return;
+
+      state.isProcessing = true;
+      btnExtract.disabled = true;
+      extractIcon.classList.add('hidden');
+      extractSpinner.classList.remove('hidden');
+
+      let totalExtracted = 0;
+      let failedFiles = [];
+
+      for (let i = 0; i < state.files.length; i++) {
+        const currentFile = state.files[i];
+        extractBtnText.textContent = `正在辨識 (${i + 1}/${state.files.length})...`;
+        statusText.innerHTML = `<span class="text-indigo-600 font-medium">正在使用 AI 分析「${escapeHtml(currentFile.name)}」，請稍候...</span>`;
+
+        try {
+          const records = await extractInvoicesWithGemini(currentFile);
+          if (records.length > 0) {
+            state.rows.push(...records);
+            totalExtracted += records.length;
+            renderResultTable();
+          }
+        } catch (error) {
+          failedFiles.push(currentFile.name);
+        }
+      }
+
+      // 恢復按鈕狀態
+      state.isProcessing = false;
+      extractIcon.classList.remove('hidden');
+      extractSpinner.classList.add('hidden');
+      extractBtnText.textContent = '開始 AI 智慧擷取';
+      btnExtract.disabled = state.files.length === 0;
+
+      if (failedFiles.length === 0) {
+        statusText.innerHTML = `<span class="text-emerald-700 font-medium">辨識完成！共擷取 ${totalExtracted} 筆發票資料。</span>`;
+        showToast(`辨識完成！成功擷取 ${totalExtracted} 筆發票資料，可直接在下方表格微調或一鍵複製。`, 'success');
+      } else {
+        statusText.innerHTML = `<span class="text-amber-700 font-medium">部分檔案辨識失敗（${failedFiles.length} 個），其餘已完成。</span>`;
+        showToast(`共擷取 ${totalExtracted} 筆資料，但以下檔案辨識失敗：${failedFiles.join(', ')}`, 'error');
+      }
+    }
+
+    /**
+     * 渲染結果表格
+     */
+    function renderResultTable() {
+      const count = state.rows.length;
+      rowCountBadge.textContent = `${count} 筆資料`;
+      btnCopyExcel.disabled = count === 0;
+      btnExportCsv.disabled = count === 0;
+
+      if (count === 0) {
+        resultTableBody.innerHTML = `
+          <tr id="emptyStateRow">
+            <td colspan="6" class="py-12 px-4 text-center text-slate-400">
+              <div class="max-w-sm mx-auto space-y-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <p class="text-sm font-medium text-slate-500">尚無擷取資料</p>
+                <p class="text-xs text-slate-400">請上傳發票 PDF 或圖片並點擊「開始 AI 智慧擷取」，或點擊右上角「載入範例測試」體驗效果。</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      resultTableBody.innerHTML = state.rows.map((row, index) => `
+        <tr class="hover:bg-slate-50/80 transition-colors group">
+          <td contenteditable="true" onblur="updateCell('${row.id}', 'date', this.innerText)" class="editable-cell py-2.5 px-3.5 border-r border-slate-200 font-mono text-xs sm:text-sm whitespace-nowrap">${escapeHtml(row.date)}</td>
+          <td contenteditable="true" onblur="updateCell('${row.id}', 'companyName', this.innerText)" class="editable-cell py-2.5 px-3.5 border-r border-slate-200 font-medium text-slate-900">${escapeHtml(row.companyName)}</td>
+          <td contenteditable="true" onblur="updateCell('${row.id}', 'invoiceNo', this.innerText)" class="editable-cell py-2.5 px-3.5 border-r border-slate-200 font-mono text-xs sm:text-sm whitespace-nowrap">${escapeHtml(row.invoiceNo)}</td>
+          <td contenteditable="true" onblur="updateCell('${row.id}', 'price', this.innerText)" class="editable-cell py-2.5 px-3.5 border-r border-slate-200 font-mono font-semibold text-emerald-700 whitespace-nowrap">${escapeHtml(row.price)}</td>
+          <td contenteditable="true" onblur="updateCell('${row.id}', 'items', this.innerText)" class="editable-cell py-2.5 px-3.5 border-r border-slate-200 text-slate-700 leading-relaxed">${escapeHtml(row.items)}</td>
+          <td class="py-2 px-2.5 text-center">
+            <button type="button" onclick="deleteRow('${row.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="刪除此列">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    /**
+     * 更新使用者在表格中直接編輯的儲存格資料
+     */
+    window.updateCell = function(rowId, field, newValue) {
+      const row = state.rows.find(r => r.id === rowId);
+      if (row) {
+        // 清除可能的換行符，避免破壞 Excel 單列結構
+        row[field] = newValue.replace(/[\r\n]+/g, ' ').trim();
+      }
+    };
+
+    /**
+     * 刪除單列資料
+     */
+    window.deleteRow = function(rowId) {
+      state.rows = state.rows.filter(r => r.id !== rowId);
+      renderResultTable();
+    };
+
+    /**
+     * 一鍵複製（無標題列，Tab 分隔，直接貼入 Excel A 至 E 欄）
+     */
+    function copyToExcelFormat() {
+      if (state.rows.length === 0) return;
+
+      // 產生純資料列（略過第一列標題列），欄位以 \t 分隔，列與列以 \n 分隔
+      const tsvLines = state.rows.map(row => {
+        const cols = [
+          (row.date || '').replace(/\t/g, ' '),
+          (row.companyName || '').replace(/\t/g, ' '),
+          (row.invoiceNo || '').replace(/\t/g, ' '),
+          (row.price || '').replace(/\t/g, ' '),
+          (row.items || '').replace(/\t/g, ' ')
+        ];
+        return cols.join('\t');
+      });
+
+      const tsvText = tsvLines.join('\n');
+
+      // 使用隱藏 textarea + document.execCommand('copy') 確保在所有環境（含 iframe）穩定運作
+      const textarea = document.createElement('textarea');
+      textarea.value = tsvText;
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-9999px';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          showToast('已複製（不含標題列）！請直接到 Excel 點選儲存格（如 A2）按 Ctrl+V / Cmd+V 貼上。', 'success');
+        } else {
+          showToast('複製失敗，請手動選取表格內容複製。', 'error');
+        }
+      } catch (err) {
+        showToast('複製時發生錯誤，請手動選取表格內容複製。', 'error');
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+
+    /**
+     * 匯出 CSV 檔案（含 UTF-8 BOM 確保 Excel 開啟中文不亂碼）
+     */
+    function exportToCsv() {
+      if (state.rows.length === 0) return;
+
+      const escapeCsvField = (val) => {
+        const str = String(val || '');
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      const csvRows = state.rows.map(r => [
+        escapeCsvField(r.date),
+        escapeCsvField(r.companyName),
+        escapeCsvField(r.invoiceNo),
+        escapeCsvField(r.price),
+        escapeCsvField(r.items)
+      ].join(','));
+
+      // 加上 BOM (\uFEFF) 避免 Excel 開啟中文亂碼
+      const csvContent = '\uFEFF' + csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      link.href = url;
+      link.download = `發票整理_${today}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast('已匯出 CSV 檔案（不含標題列）。', 'success');
+    }
+
+    /**
+     * 載入範例資料（模擬剛才的兩張發票辨識結果）
+     */
+    function loadSampleData() {
+      const samples = [
+        {
+          date: '2026/11/18',
+          companyName: 'ELECTECHNOLOGY INTERNATIONAL TRADING CO., LTD',
+          invoiceNo: '20261118001',
+          price: '$12465',
+          items: '掛墙扇 FB-40BC (40個)、乾手機 M-688A (10個)、乾手機 M-2008S (4個)'
+        },
+        {
+          date: '2026/11/17',
+          companyName: 'WAYBO ENGINEERING COMPANY',
+          invoiceNo: 'INV258-26',
+          price: '$10000',
+          items: '簽發 F. S. 251 証書 170_500000 - 500024 (25張)'
+        }
+      ];
+
+      state.rows.push(...samples.map(normalizeInvoiceRecord));
+      renderResultTable();
+      showToast('已載入 2 筆範例發票資料！您可以直接點擊綠色按鈕測試「一鍵複製到 Excel」。', 'info');
+    }
+
+    /**
+     * 事件監聽綁定
+     */
+    dropZone.addEventListener('click', () => fileInput.click());
+    btnAddMore.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleFilesAdded(e.target.files);
+        fileInput.value = ''; // 重置以允許重複選取同檔名檔案
+      }
+    });
+
+    // 拖拉互動效果
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('border-indigo-500', 'bg-indigo-50/60');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('border-indigo-500', 'bg-indigo-50/60');
+      });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      if (e.dataTransfer && e.dataTransfer.files) {
+        handleFilesAdded(e.dataTransfer.files);
+      }
+    });
+
+    btnExtract.addEventListener('click', runBatchExtraction);
+    btnCopyExcel.addEventListener('click', copyToExcelFormat);
+    btnExportCsv.addEventListener('click', exportToCsv);
+    btnLoadSample.addEventListener('click', loadSampleData);
+
+    btnAddRow.addEventListener('click', () => {
+      state.rows.push(normalizeInvoiceRecord({
+        date: new Date().toISOString().slice(0, 10).replace(/-/g, '/'),
+        companyName: '',
+        invoiceNo: '',
+        price: '$0',
+        items: ''
+      }));
+      renderResultTable();
+    });
+
+    btnClearAll.addEventListener('click', () => {
+      if (state.isProcessing) return;
+      state.files.forEach(f => {
+        if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      });
+      state.files = [];
+      state.rows = [];
+      renderFileList();
+      renderResultTable();
+      showToast('已清空所有檔案與表格資料。', 'info');
+    });
+  </script>
+</body>
+</html>
